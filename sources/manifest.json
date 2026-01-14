@@ -1,0 +1,66 @@
+{
+  "type": "folder",
+  "name": "Sources",
+  "children": [
+    {
+      "type": "folder",
+      "name": "Apollo Signals",
+      "children": [
+        {
+          "type": "file",
+          "name": "content.luau"
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "WorldClass",
+      "children": [
+        {
+          "type": "folder",
+          "name": "packages",
+          "children": [
+            { "type": "file", "name": "combatTool.lua" },
+            { "type": "file", "name": "region.lua" },
+            { "type": "file", "name": "serverExtender.lua" },
+            { "type": "file", "name": "typesCache.lua" },
+            { "type": "file", "name": "init.lua" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "type": "folder",
+      "name": "FreeCamera",
+      "children": [
+        {
+          "type": "file",
+            "name": "controller.luau"
+        }
+      ]
+    },
+
+    {
+      "type": "folder",
+      "name": "Placement.controller",
+      "children": [
+        { "type": "file", "name": "env.input.lua" },
+        { "type": "file", "name": "init.lua" },
+        { "type": "file", "name": "offsets.lua" },
+        { "type": "file", "name": "wall.controllers.lua" }
+      ]
+    },
+
+    {
+      "type": "folder",
+      "name": "InterfaceBuiltIn",
+      "children": [
+        {
+          "type": "file",
+            "name": "controller.luau"
+        }
+      ]
+    }
+  ]
+}
