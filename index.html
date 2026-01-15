@@ -1582,22 +1582,8 @@
             // Root manifests (GitHub Pages safe): ./manifestVideos.txt (JSON stored as text)
             const rootManifest = await tryFetchJSONText('./manifestVideos.json');
             list = extractVideoFilesFromTree(rootManifest);
-
-            // Legacy fallbacks (optional)
-            if (!list) {
-                const jsonManifest = await tryFetchJSON('./videos/manifest.json');
-                list = normalizeVideoList(jsonManifest);
-            }
-
-            if (!list) {
-                const textManifest = await tryFetchText('./videos/manifest.txt');
-                if (textManifest) {
-                    list = textManifest
-                        .split("/?/g")
-                        .map((x) => x.trim())
-                        .filter(Boolean);
-                }
-            }
+            
+            console.table(list)
 
             // Best-effort: parse directory listing (usually blocked on GitHub Pages)
             if (!list) {
