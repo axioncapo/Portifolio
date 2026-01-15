@@ -1,64 +1,107 @@
 {
   "type": "folder",
   "name": "Sources",
+  "path": "Sources",
   "children": [
     {
       "type": "folder",
       "name": "Apollo Signals",
+      "path": "Sources/Apollo Signals",
       "children": [
         {
           "type": "file",
-          "name": "content.txt"
+          "name": "content.txt",
+          "path": "Sources/Apollo Signals/content.txt"
         }
       ]
     },
     {
       "type": "folder",
       "name": "WorldClass",
+      "path": "Sources/WorldClass",
       "children": [
         {
           "type": "folder",
           "name": "packages",
+          "path": "Sources/WorldClass/packages",
           "children": [
-            { "type": "file", "name": "combatTool.txt" },
-            { "type": "file", "name": "region.txt" },
-            { "type": "file", "name": "serverExtender.txt" },
-            { "type": "file", "name": "typesCache.txt" },
-            { "type": "file", "name": "init.txt" }
+            {
+              "type": "file",
+              "name": "combatTool.txt",
+              "path": "Sources/WorldClass/packages/combatTool.txt"
+            },
+            {
+              "type": "file",
+              "name": "region.txt",
+              "path": "Sources/WorldClass/packages/region.txt"
+            },
+            {
+              "type": "file",
+              "name": "serverExtender.txt",
+              "path": "Sources/WorldClass/packages/serverExtender.txt"
+            },
+            {
+              "type": "file",
+              "name": "typesCache.txt",
+              "path": "Sources/WorldClass/packages/typesCache.txt"
+            },
+            {
+              "type": "file",
+              "name": "init.txt",
+              "path": "Sources/WorldClass/packages/init.txt"
+            }
           ]
         }
       ]
     },
-
     {
       "type": "folder",
       "name": "FreeCamera",
+      "path": "Sources/FreeCamera",
       "children": [
         {
           "type": "file",
-            "name": "controller.txt"
+          "name": "controller.txt",
+          "path": "Sources/FreeCamera/controller.txt"
         }
       ]
     },
-
     {
       "type": "folder",
       "name": "Placement.controller",
-      "children": [
-        { "type": "file", "name": "env.input.txt" },
-        { "type": "file", "name": "init.txt" },
-        { "type": "file", "name": "offsets.txt" },
-        { "type": "file", "name": "wall.controllers.txt" }
-      ]
-    },
-
-    {
-      "type": "folder",
-      "name": "InterfaceBuiltIn",
+      "path": "Sources/Placement.controller",
       "children": [
         {
           "type": "file",
-            "name": "controller.txt"
+          "name": "env.input.txt",
+          "path": "Sources/Placement.controller/env.input.txt"
+        },
+        {
+          "type": "file",
+          "name": "init.txt",
+          "path": "Sources/Placement.controller/init.txt"
+        },
+        {
+          "type": "file",
+          "name": "offsets.txt",
+          "path": "Sources/Placement.controller/offsets.txt"
+        },
+        {
+          "type": "file",
+          "name": "wall.controllers.txt",
+          "path": "Sources/Placement.controller/wall.controllers.txt"
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "InterfaceBuiltIn",
+      "path": "Sources/InterfaceBuiltIn",
+      "children": [
+        {
+          "type": "file",
+          "name": "controller.txt",
+          "path": "Sources/InterfaceBuiltIn/controller.txt"
         }
       ]
     }

@@ -1752,30 +1752,113 @@
             return null;
         }
 
+        function normalizeFetchPath(p) {
+            const s = String(p || '').trim();
+            if (!s) return '';
+            if (/^https?:\/\//i.test(s)) return s;
+            if (s.startsWith('./') || s.startsWith('../') || s.startsWith('/')) return s;
+            return `./${s}`;
+        }
+
         function decoratePaths(node, parentPath) {
-            const p = String(parentPath || '.').replace(/\/+$/, '');
+            const parent = String(parentPath || '.').replace(/\/+$/, '');
 
             function join(a, b) {
-                if (!a || a === '.') return `./${b}`;
-                if (a.startsWith('./')) return `${a}/${b}`;
+                if (!a || a === '.') return `${b}`;
                 return `${a}/${b}`;
             }
 
+            if (!node || typeof node !== 'object') return;
+
             if (node.type === 'folder') {
-                node.path = join(p, node.name);
+                // NÃO sobrescreve se já veio do manifest
+                if (!node.path) node.path = join(parent, node.name);
+
+                const base = node.path || parent;
                 if (Array.isArray(node.children)) {
                     for (const child of node.children) {
-                        decoratePaths(child, node.path);
+                        decoratePaths(child, base);
                     }
                 }
                 return;
             }
 
             if (node.type === 'file') {
-                if (!node.path) node.path = join(p, node.name);
+                // Usa path direto do manifest; só cria se não existir
+                if (!node.path) node.path = join(parent, node.name);
             }
         }
 
+        async function openFilePreview(fileNode) {
+            const rawPath = fileNode?.path;
+            if (!rawPath) return;
+
+            const url = encodeURI(normalizeFetchPath(rawPath));
+
+            try {
+                setSourcesStatus(`Opening: ${rawPath}`);
+
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const text = await res.text();
+
+                if (!sourcesPreview || !sourcesPreviewCode || !sourcesPreviewTitle) return;
+
+                sourcesPreviewTitle.textContent = fileNode.name;
+
+                sourcesPreviewCode.className = languageClassForFile(fileNode.name);
+                sourcesPreviewCode.textContent = text;
+
+                sourcesPreview.classList.remove('is-hidden');
+
+                if (window.hljs) {
+                    try { window.hljs.highlightElement(sourcesPreviewCode); } catch {}
+                }
+
+                setSourcesStatus(`Loaded: ${rawPath}`);
+            } catch {
+                setSourcesStatus(`Failed to load: ${rawPath}`);
+                sourcesEmpty?.classList.remove('is-hidden');
+                if (sourcesEmpty) sourcesEmpty.textContent = `Could not load ${rawPath}.`;
+            }
+        }
+
+        async function initSourcesExplorer(force = false) {
+            if (sourcesInitialized && !force) return;
+            sourcesInitialized = true;
+
+            setSourcesStatus('Loading sources…');
+
+            try {
+                // Manifest na raiz e em .txt (JSON como texto)
+                const manifest = await tryFetchJSONText('./manifestSources.txt');
+                const normalized = normalizeSourcesManifest(manifest);
+
+                if (!normalized) throw new Error('Invalid manifest format');
+
+                sourcesRoot = normalized;
+                sourcesRoot.name = 'Sources';
+                sourcesRoot.type = 'folder';
+
+                // Garante paths faltantes, mas respeita os paths existentes
+                decoratePaths(sourcesRoot, '.');
+
+                renderSidebar();
+                setCurrentFolder(sourcesRoot, []);
+
+                setSourcesStatus('Sources ready.');
+                sourcesEmpty?.classList.add('is-hidden');
+            } catch {
+                sourcesRoot = null;
+                setSourcesStatus('Missing or invalid ./manifestSources.txt');
+                if (sourcesEmpty) {
+                    sourcesEmpty.textContent = 'Add ./manifestSources.txt to enable the file explorer.';
+                    sourcesEmpty.classList.remove('is-hidden');
+                }
+            }
+        }
+        
         function sortChildren(children) {
             const folders = [];
             const files = [];
