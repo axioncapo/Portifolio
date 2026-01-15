@@ -1386,757 +1386,601 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"></script>
-    <script type="module">
-        const welcomeOverlay = document.getElementById('welcomeOverlay');
-        const centerMenu = document.getElementById('centerMenu');
-        const expandPanel = document.getElementById('expandPanel');
+    
+  <script type="module">
+    const welcomeOverlay = document.getElementById('welcomeOverlay');
+    const centerMenu = document.getElementById('centerMenu');
+    const expandPanel = document.getElementById('expandPanel');
 
-        const menuButtons = Array.from(document.querySelectorAll('.menu-button'));
-        const tabIds = ['devVideos', 'sources', 'prices'];
+    const menuButtons = Array.from(document.querySelectorAll('.menu-button'));
+    const tabIds = ['devVideos', 'sources', 'prices'];
+    const tabEls = Object.fromEntries(tabIds.map((id) => [id, document.getElementById(id)]));
 
-        const tabEls = Object.fromEntries(tabIds.map((id) => [id, document.getElementById(id)]));
+    let activeTab = null;
 
-        let activeTab = null;
+    function setButtonStates(nextTab) {
+      for (const btn of menuButtons) {
+        const isActive = btn.dataset.tab === nextTab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+      }
+    }
 
-        function setButtonStates(nextTab) {
-            for (const btn of menuButtons) {
-                const isActive = btn.dataset.tab === nextTab;
-                btn.classList.toggle('active', isActive);
-                btn.setAttribute('aria-selected', String(isActive));
-            }
+    function setTabStates(nextTab) {
+      for (const [id, el] of Object.entries(tabEls)) {
+        if (!el) continue;
+        el.classList.toggle('active', id === nextTab);
+      }
+    }
+
+    function closePanel() {
+      activeTab = null;
+      setButtonStates(null);
+      setTabStates(null);
+      expandPanel.classList.remove('open');
+    }
+
+    function openPanel(tabId) {
+      if (!tabEls[tabId]) return;
+
+      if (activeTab === tabId) {
+        closePanel();
+        return;
+      }
+
+      activeTab = tabId;
+      setButtonStates(tabId);
+      setTabStates(tabId);
+      expandPanel.classList.add('open');
+
+      if (tabId === 'devVideos') loadDevVideos();
+      if (tabId === 'sources') initSourcesExplorer();
+    }
+
+    for (const btn of menuButtons) btn.addEventListener('click', () => openPanel(btn.dataset.tab));
+
+    // Welcome overlay: keep visible for 2s, then fade + dust
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (!welcomeOverlay) return;
+        welcomeOverlay.classList.add('welcome-hide');
+
+        setTimeout(() => {
+          welcomeOverlay.classList.add('is-hidden');
+          centerMenu?.classList.remove('is-hidden');
+        }, 950);
+      }, 2000);
+    });
+
+    // Discord copy
+    const discordContact = document.getElementById('discordContact');
+    const copiedTooltip = document.getElementById('copiedTooltip');
+    const discordValue = 'axiom.capo';
+
+    discordContact?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(discordValue);
+        copiedTooltip?.classList.add('show');
+        setTimeout(() => copiedTooltip?.classList.remove('show'), 2000);
+      } catch {
+        const t = document.createElement('textarea');
+        t.value = discordValue;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+        copiedTooltip?.classList.add('show');
+        setTimeout(() => copiedTooltip?.classList.remove('show'), 2000);
+      }
+    });
+
+    // ----------------------------
+    // Helpers
+    // ----------------------------
+    async function tryFetchText(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) return null;
+      return await res.text();
+    }
+
+    async function tryFetchJSONText(url) {
+      const text = await tryFetchText(url);
+      if (!text) return null;
+      try { return JSON.parse(text); } catch { return null; }
+    }
+
+    function getExtFromName(name) {
+      const m = /\.([a-z0-9]+)$/i.exec(name || '');
+      return m ? m[1].toLowerCase() : '';
+    }
+
+    function normalizeFetchPath(p) {
+      const s = String(p || '').trim();
+      if (!s) return '';
+      if (/^https?:\/\//i.test(s)) return s;
+      if (s.startsWith('./') || s.startsWith('../') || s.startsWith('/')) return s;
+      return `./${s}`;
+    }
+
+    function titleFromFilename(filename) {
+      const base = String(filename).replace(/^.*[\/]/, '').replace(/\.[^.]+$/, '');
+      return base.replace(/[_-]+/g, ' ').trim() || base;
+    }
+
+    function joinPath(base, name) {
+      const a = String(base || '.').replace(/\/+$/, '');
+      if (!a || a === '.') return `./${name}`;
+      return `${a}/${name}`;
+    }
+
+    // ----------------------------
+    // Dev Videos (manifestVideos.txt)
+    // ----------------------------
+    let videosLoaded = false;
+
+    function normalizeVideoList(payload) {
+      if (!payload) return null;
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload.files)) return payload.files;
+      if (Array.isArray(payload.videos)) return payload.videos;
+      return null;
+    }
+
+    function extractVideoFilesFromTree(tree) {
+      if (!tree) return null;
+
+      if (Array.isArray(tree)) return tree;
+
+      const list = normalizeVideoList(tree);
+      if (list) return list;
+
+      const allowed = new Set(['mp4', 'webm', 'mov', 'm4v']);
+      const out = [];
+
+      function walk(node, base) {
+        if (!node) return;
+
+        if (node.type === 'folder') {
+          const nextBase = node.name ? joinPath(base, node.name) : base;
+          const kids = Array.isArray(node.children) ? node.children : [];
+          for (const child of kids) walk(child, nextBase);
+          return;
         }
 
-        function setTabStates(nextTab) {
-            for (const [id, el] of Object.entries(tabEls)) {
-                if (!el) continue;
-                el.classList.toggle('active', id === nextTab);
-            }
+        if (node.type === 'file') {
+          const filename = String(node.name || '');
+          const ext = getExtFromName(filename);
+
+          if (ext === 'json') return;
+          if (!allowed.has(ext)) return;
+
+          if (node.path) {
+            out.push(node.path);
+          } else {
+            out.push(joinPath(base, filename));
+          }
         }
+      }
 
-        function closePanel() {
-            activeTab = null;
-            setButtonStates(null);
-            setTabStates(null);
-            expandPanel.classList.remove('open');
+      walk(tree, '.');
+      return out.length ? out : null;
+    }
+
+    function hardenVideoElement(v) {
+      // Remove menu options on Chromium
+      v.controls = true;
+      v.preload = 'metadata';
+      v.playsInline = true;
+      v.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      v.setAttribute('disablepictureinpicture', '');
+      v.setAttribute('disableremoteplayback', '');
+
+      // Avoid right-click download menu
+      v.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
+    async function loadDevVideos() {
+      if (videosLoaded) return;
+      videosLoaded = true;
+
+      const grid = document.getElementById('devVideosGrid');
+      const empty = document.getElementById('devVideosEmpty');
+      if (!grid || !empty) return;
+
+      grid.innerHTML = '';
+      empty.classList.add('is-hidden');
+
+      const rootManifest = await tryFetchJSONText('./manifestVideos.txt');
+      const list = extractVideoFilesFromTree(rootManifest);
+
+      if (!list || list.length === 0) {
+        empty.textContent = 'No videos found. Add ./manifestVideos.txt (JSON stored as text).';
+        empty.classList.remove('is-hidden');
+        return;
+      }
+
+      for (const entry of list) {
+        const raw = String(entry);
+        const src = encodeURI(normalizeFetchPath(raw));
+        const title = titleFromFilename(raw);
+
+        const card = document.createElement('div');
+        card.className = 'video-card';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'video-thumb';
+
+        const v = document.createElement('video');
+        v.src = src;
+        hardenVideoElement(v);
+
+        thumb.appendChild(v);
+
+        const meta = document.createElement('div');
+        meta.className = 'video-meta';
+
+        const t = document.createElement('div');
+        t.className = 'video-title';
+        t.textContent = title;
+
+        const p = document.createElement('div');
+        p.className = 'video-path';
+        p.textContent = src;
+
+        meta.appendChild(t);
+        meta.appendChild(p);
+
+        card.appendChild(thumb);
+        card.appendChild(meta);
+        grid.appendChild(card);
+      }
+    }
+
+    // ----------------------------
+    // Sources Explorer (manifestSources.json + node.path)
+    // ----------------------------
+    let sourcesInitialized = false;
+    let sourcesRoot = null;
+
+    // currentPath holds folders from root -> current folder (inclusive)
+    let currentPath = [];
+    let currentFolder = null;
+
+    const sourcesStatus = document.getElementById('sourcesStatus');
+    const sourcesEmpty = document.getElementById('sourcesEmpty');
+    const sourcesSidebar = document.getElementById('sourcesSidebar');
+    const sourcesList = document.getElementById('sourcesList');
+    const sourcesBreadcrumb = document.getElementById('sourcesBreadcrumb');
+
+    const sourcesPreview = document.getElementById('sourcesPreview');
+    const sourcesPreviewTitle = document.getElementById('sourcesPreviewTitle');
+    const sourcesPreviewCode = document.getElementById('sourcesPreviewCode');
+    const sourcesCopyBtn = document.getElementById('sourcesCopyBtn');
+    const sourcesClosePreviewBtn = document.getElementById('sourcesClosePreviewBtn');
+    const sourcesRefreshBtn = document.getElementById('sourcesRefreshBtn');
+
+    function setSourcesStatus(text) {
+      if (sourcesStatus) sourcesStatus.textContent = text || '';
+    }
+
+    function getExt(name) {
+      const m = /\.([a-z0-9]+)$/i.exec(name || '');
+      return m ? m[1].toLowerCase() : '';
+    }
+
+    function languageClassForFile(name) {
+      const ext = getExt(name);
+      if (ext === 'lua' || ext === 'luau') return 'language-lua';
+      if (ext === 'js') return 'language-javascript';
+      if (ext === 'ts') return 'language-typescript';
+      if (ext === 'json') return 'language-json';
+      if (ext === 'md') return 'language-markdown';
+      if (ext === 'html') return 'language-xml';
+      if (ext === 'css') return 'language-css';
+      return '';
+    }
+
+    function normalizeSourcesManifest(manifest) {
+      if (!manifest) return null;
+
+      if (manifest.type === 'folder' && Array.isArray(manifest.children)) return manifest;
+
+      if (Array.isArray(manifest)) {
+        return { name: 'Sources', type: 'folder', children: manifest };
+      }
+
+      return null;
+    }
+
+    function decoratePaths(node, parentPath) {
+      const parent = String(parentPath || '').replace(/\/+$/, '');
+
+      function join(a, b) {
+        if (!a) return b;
+        return `${a}/${b}`;
+      }
+
+      if (!node || typeof node !== 'object') return;
+
+      if (node.type === 'folder') {
+        if (!node.path) node.path = join(parent, node.name);
+        const base = node.path || parent;
+
+        if (Array.isArray(node.children)) {
+          for (const child of node.children) decoratePaths(child, base);
         }
+        return;
+      }
 
-        function openPanel(tabId) {
-            if (!tabEls[tabId]) return;
+      if (node.type === 'file') {
+        if (!node.path) node.path = join(parent, node.name);
+      }
+    }
 
-            if (activeTab === tabId) {
-                closePanel();
-                return;
-            }
+    function sortChildren(children) {
+      const folders = [];
+      const files = [];
 
-            activeTab = tabId;
-            setButtonStates(tabId);
-            setTabStates(tabId);
-            expandPanel.classList.add('open');
+      for (const c of children || []) {
+        if (!c) continue;
 
-            if (tabId === 'devVideos') {
-                loadDevVideos();
-            } else if (tabId === 'sources') {
-                initSourcesExplorer();
-            }
-        }
+        if (c.type === 'file' && getExt(c.name) === 'json') continue; // ignore .json globally
 
-        for (const btn of menuButtons) {
-            btn.addEventListener('click', () => openPanel(btn.dataset.tab));
-        }
+        if (c.type === 'folder') folders.push(c);
+        else if (c.type === 'file') files.push(c);
+      }
 
-        // Welcome overlay: keep visible for 2s, then fade + dust
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                if (!welcomeOverlay) return;
-                welcomeOverlay.classList.add('welcome-hide');
+      const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+      folders.sort(byName);
+      files.sort(byName);
+      return [...folders, ...files];
+    }
 
-                // Reveal menu shortly after fade begins
-                setTimeout(() => {
-                    welcomeOverlay.classList.add('is-hidden');
-                    centerMenu?.classList.remove('is-hidden');
-                }, 320);
-            }, 2000);
+    function setCurrentFolder(folder, pathArr) {
+      currentFolder = folder;
+      currentPath = pathArr;
+
+      renderBreadcrumb();
+      renderList();
+      highlightSidebarSelection();
+    }
+
+    function renderBreadcrumb() {
+      if (!sourcesBreadcrumb) return;
+      sourcesBreadcrumb.innerHTML = '';
+
+      for (let i = 0; i < currentPath.length; i++) {
+        const segFolder = currentPath[i];
+
+        const crumb = document.createElement('div');
+        crumb.className = 'crumb';
+        crumb.textContent = segFolder.name;
+
+        crumb.addEventListener('click', () => {
+          const nextPath = currentPath.slice(0, i + 1);
+          setCurrentFolder(segFolder, nextPath);
+          closePreview();
         });
 
-        // Discord copy
-        const discordContact = document.getElementById('discordContact');
-        const copiedTooltip = document.getElementById('copiedTooltip');
-        const discordValue = 'Axion.capo';
+        sourcesBreadcrumb.appendChild(crumb);
 
-        discordContact?.addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(discordValue);
-                copiedTooltip?.classList.add('show');
-                setTimeout(() => copiedTooltip?.classList.remove('show'), 2000);
-            } catch {
-                // Fallback for older browsers
-                const t = document.createElement('textarea');
-                t.value = discordValue;
-                document.body.appendChild(t);
-                t.select();
-                document.execCommand('copy');
-                document.body.removeChild(t);
-                copiedTooltip?.classList.add('show');
-                setTimeout(() => copiedTooltip?.classList.remove('show'), 2000);
-            }
-        });
-
-        // ----------------------------
-        // Dev Videos (requires manifest)
-        // ----------------------------
-        let videosLoaded = false;
-
-        function titleFromFilename(filename) {
-            const base = filename.replace(/^.*[\/]/, '').replace(/\.[^.]+$/, '');
-            return base.replace(/[_-]+/g, ' ').trim() || base;
+        if (i < currentPath.length - 1) {
+          const sep = document.createElement('div');
+          sep.className = 'crumb-sep';
+          sep.textContent = '›';
+          sourcesBreadcrumb.appendChild(sep);
         }
+      }
+    }
 
-        async function tryFetchText(url) {
-            const res = await fetch(url, { cache: 'no-store' });
-            if (!res.ok) return null;
-            return await res.text();
-        }
+    function renderList() {
+      if (!sourcesList || !currentFolder) return;
 
-        async function tryFetchJSON(url) {
-            const res = await fetch(url, { cache: 'no-store' });
-            if (!res.ok) return null;
-            return await res.json();
-        }
+      sourcesList.innerHTML = '';
+      sourcesEmpty?.classList.add('is-hidden');
 
+      const children = sortChildren(currentFolder.children || []);
+      if (children.length === 0) {
+        sourcesEmpty?.classList.remove('is-hidden');
+        setSourcesStatus(`Path: ${currentFolder.path || ''}`);
+        return;
+      }
 
-        async function tryFetchJSONText(url) {
-            const text = await tryFetchText(url);
-            if (!text) return null;
-            try {
-                return JSON.parse(text);
-            } catch (err) {
-                return null;
-            }
-        }
+      for (const item of children) {
+        const row = document.createElement('div');
+        row.className = 'file-row';
 
-        function getExtFromName(name) {
-            const m = /\.([a-z0-9]+)$/i.exec(name || '');
-            return m ? m[1].toLowerCase() : '';
-        }
+        const nameCol = document.createElement('div');
+        nameCol.className = 'name';
 
-        function joinPath(base, name) {
-            const a = String(base || '.').replace(/\/+$/, '');
-            if (!a || a === '.') return `./${name}`;
-            return `${a}/${name}`;
-        }
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = item.type === 'folder' ? '📁' : '📄';
 
-        function extractVideoFilesFromTree(tree) {
-            if (!tree) return null;
+        const label = document.createElement('span');
+        label.textContent = item.name;
 
-            // If the manifest is already an array of filenames/paths
-            if (Array.isArray(tree)) return tree;
+        nameCol.appendChild(icon);
+        nameCol.appendChild(label);
 
-            // If the manifest is { files: [...] } or { videos: [...] }
-            const list = normalizeVideoList(tree);
-            if (list) return list;
+        const typeCol = document.createElement('div');
+        typeCol.className = 'type';
+        typeCol.textContent = item.type === 'folder' ? 'Folder' : 'File';
 
-            const allowed = new Set(['mp4', 'webm', 'mov', 'm4v']);
-            const out = [];
+        row.appendChild(nameCol);
+        row.appendChild(typeCol);
 
-            function walk(node, base) {
-                if (!node) return;
-
-                if (node.type === 'folder') {
-                    const nextBase = node.name ? joinPath(base, node.name) : base;
-                    const kids = Array.isArray(node.children) ? node.children : [];
-                    for (const child of kids) walk(child, nextBase);
-                    return;
-                }
-
-                if (node.type === 'file') {
-                    const filename = String(node.name || '');
-                    const ext = getExtFromName(filename);
-
-                    // Ignore JSON files (user rule)
-                    if (ext === 'json') return;
-
-                    if (!allowed.has(ext)) return;
-
-                    out.push(joinPath(base, filename));
-                }
-            }
-
-            walk(tree, '.');
-
-            return out.length ? out : null;
-        }
-
-        function normalizeVideoList(payload) {
-            if (!payload) return null;
-            if (Array.isArray(payload)) return payload;
-            if (Array.isArray(payload.files)) return payload.files;
-            if (Array.isArray(payload.videos)) return payload.videos;
-            return null;
-        }
-
-        async function loadDevVideos() {
-            if (videosLoaded) return;
-            videosLoaded = true;
-
-            const grid = document.getElementById('devVideosGrid');
-            const empty = document.getElementById('devVideosEmpty');
-
-            if (!grid || !empty) return;
-
-            grid.innerHTML = '';
-            empty.classList.add('is-hidden');
-
-            let list = null;
-
-            // Root manifests (GitHub Pages safe): ./manifestVideos.txt (JSON stored as text)
-            const rootManifest = await tryFetchJSONText('./manifestVideos.txt');
-            list = extractVideoFilesFromTree(rootManifest);
-            
-            console.table(list)
-
-            // Best-effort: parse directory listing (usually blocked on GitHub Pages)
-            if (!list) {
-                const listing = await tryFetchText('./videos/');
-                if (listing) {
-                    const found = Array.from(listing.matchAll(/href="([^"]+\.(?:mp4|webm|mov|m4v))"/gi)).map((m) => m[1]);
-                    const cleaned = found
-                        .map((x) => String(x).split('/').pop())
-                        .map((x) => String(x).replace(/\?.*$/, ''))
-                        .filter(Boolean);
-
-                    if (cleaned.length > 0) {
-                        list = Array.from(new Set(cleaned));
-                    }
-                }
-            }
-
-
-            if (!list || list.length === 0) {
-                empty.textContent = 'No videos found. Add ./manifestVideos.txt (JSON stored as text). Legacy fallbacks: ./videos/manifest.json or ./videos/manifest.txt.';
-                empty.classList.remove('is-hidden');
-                return;
-            }
-
-            for (const file of list) {
-                const src = file.startsWith('./') || file.startsWith('/') ? file : `./videos/${file}`;
-                const title = titleFromFilename(file);
-
-                const card = document.createElement('div');
-                card.className = 'video-card';
-
-                const thumb = document.createElement('div');
-                thumb.className = 'video-thumb';
-
-                const v = document.createElement('video');
-                v.src = src;
-                v.controls = true;
-                v.preload = 'metadata';
-                v.playsInline = true;
-
-                thumb.appendChild(v);
-
-                const meta = document.createElement('div');
-                meta.className = 'video-meta';
-
-                const t = document.createElement('div');
-                t.className = 'video-title';
-                t.textContent = title;
-
-                const p = document.createElement('div');
-                p.className = 'video-path';
-                p.textContent = src;
-
-                meta.appendChild(t);
-                meta.appendChild(p);
-
-                card.appendChild(thumb);
-                card.appendChild(meta);
-
-                grid.appendChild(card);
-            }
-        }
-
-        // ----------------------------
-        // Sources Explorer (requires manifest)
-        // ----------------------------
-        let sourcesInitialized = false;
-        let sourcesRoot = null;
-        let currentFolder = null;
-        let currentStack = [];
-
-        const sourcesStatus = document.getElementById('sourcesStatus');
-        const sourcesEmpty = document.getElementById('sourcesEmpty');
-        const sourcesSidebar = document.getElementById('sourcesSidebar');
-        const sourcesList = document.getElementById('sourcesList');
-        const sourcesBreadcrumb = document.getElementById('sourcesBreadcrumb');
-
-        const sourcesPreview = document.getElementById('sourcesPreview');
-        const sourcesPreviewTitle = document.getElementById('sourcesPreviewTitle');
-        const sourcesPreviewCode = document.getElementById('sourcesPreviewCode');
-        const sourcesCopyBtn = document.getElementById('sourcesCopyBtn');
-        const sourcesClosePreviewBtn = document.getElementById('sourcesClosePreviewBtn');
-        const sourcesRefreshBtn = document.getElementById('sourcesRefreshBtn');
-
-        function setSourcesStatus(text) {
-            if (sourcesStatus) sourcesStatus.textContent = text || '';
-        }
-
-        function getExt(name) {
-            const m = /\.([a-z0-9]+)$/i.exec(name || '');
-            return m ? m[1].toLowerCase() : '';
-        }
-
-        function languageClassForFile(name) {
-            const ext = getExt(name);
-            if (ext === 'lua' || ext === 'luau') return 'language-lua';
-            if (ext === 'js') return 'language-javascript';
-            if (ext === 'ts') return 'language-typescript';
-            if (ext === 'json') return 'language-json';
-            if (ext === 'md') return 'language-markdown';
-            if (ext === 'html') return 'language-xml';
-            if (ext === 'css') return 'language-css';
-            return '';
-        }
-
-        function normalizeSourcesManifest(manifest) {
-            // Preferred format:
-            // { name: "Sources", type: "folder", children: [ ... ] }
-            if (!manifest) return null;
-
-            if (manifest.type === 'folder' && Array.isArray(manifest.children)) {
-                return manifest;
-            }
-
-            // Array as root children
-            if (Array.isArray(manifest)) {
-                return { name: 'sources', type: 'folder', children: manifest };
-            }
-
-            // Object map -> folders/files
-            if (typeof manifest === 'object') {
-                const children = [];
-
-                for (const [key, value] of Object.entries(manifest)) {
-                    // Skip metadata keys if any
-                    if (key === 'name' || key === 'type' || key === 'children') continue;
-
-                    if (Array.isArray(value)) {
-                        children.push({
-                            name: key,
-                            type: 'folder',
-                            children: value.map((v) => (typeof v === 'string' ? { name: v, type: 'file' } : v)),
-                        });
-                        continue;
-                    }
-
-                    if (typeof value === 'string') {
-                        children.push({ name: key, type: 'file', path: value });
-                        continue;
-                    }
-
-                    if (value && typeof value === 'object') {
-                        // Nested folder description
-                        const nested = normalizeSourcesManifest(value);
-                        if (nested) {
-                            children.push({ name: key, type: 'folder', children: nested.children || [] });
-                        } else {
-                            children.push({ name: key, type: 'folder', children: [] });
-                        }
-                        continue;
-                    }
-                }
-
-                return { name: 'Sources', type: 'folder', children };
-            }
-
-            return null;
-        }
-
-        function normalizeFetchPath(p) {
-            const s = String(p || '').trim();
-            if (!s) return '';
-            if (/^https?:\/\//i.test(s)) return s;
-            if (s.startsWith('./') || s.startsWith('../') || s.startsWith('/')) return s;
-            return `./${s}`;
-        }
-
-        function decoratePaths(node, parentPath) {
-            const parent = String(parentPath || '.').replace(/\/+$/, '');
-
-            function join(a, b) {
-                if (!a || a === '.') return `${b}`;
-                return `${a}/${b}`;
-            }
-
-            if (!node || typeof node !== 'object') return;
-
-            if (node.type === 'folder') {
-                // NÃO sobrescreve se já veio do manifest
-                if (!node.path) node.path = join(parent, node.name);
-
-                const base = node.path || parent;
-                if (Array.isArray(node.children)) {
-                    for (const child of node.children) {
-                        decoratePaths(child, base);
-                    }
-                }
-                return;
-            }
-
-            if (node.type === 'file') {
-                // Usa path direto do manifest; só cria se não existir
-                if (!node.path) node.path = join(parent, node.name);
-            }
-        }
-
-        async function openFilePreview(fileNode) {
-            const rawPath = fileNode?.path;
-            if (!rawPath) return;
-
-            const url = encodeURI(normalizeFetchPath(rawPath));
-
-            try {
-                setSourcesStatus(`Opening: ${rawPath}`);
-
-                const res = await fetch(url, { cache: 'no-store' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-                const text = await res.text();
-
-                if (!sourcesPreview || !sourcesPreviewCode || !sourcesPreviewTitle) return;
-
-                sourcesPreviewTitle.textContent = fileNode.name;
-
-                sourcesPreviewCode.className = languageClassForFile(fileNode.name);
-                sourcesPreviewCode.textContent = text;
-
-                sourcesPreview.classList.remove('is-hidden');
-
-                if (window.hljs) {
-                    try { window.hljs.highlightElement(sourcesPreviewCode); } catch {}
-                }
-
-                setSourcesStatus(`Loaded: ${rawPath}`);
-            } catch {
-                setSourcesStatus(`Failed to load: ${rawPath}`);
-                sourcesEmpty?.classList.remove('is-hidden');
-                if (sourcesEmpty) sourcesEmpty.textContent = `Could not load ${rawPath}.`;
-            }
-        }
-
-        async function initSourcesExplorer(force = false) {
-            if (sourcesInitialized && !force) return;
-            sourcesInitialized = true;
-
-            setSourcesStatus('Loading sources…');
-
-            try {
-                // Manifest na raiz e em .txt (JSON como texto)
-                const manifest = await tryFetchJSONText('./manifestSources.txt');
-                const normalized = normalizeSourcesManifest(manifest);
-
-                if (!normalized) throw new Error('Invalid manifest format');
-
-                sourcesRoot = normalized;
-                sourcesRoot.name = 'Sources';
-                sourcesRoot.type = 'folder';
-
-                // Garante paths faltantes, mas respeita os paths existentes
-                decoratePaths(sourcesRoot, '.');
-
-                renderSidebar();
-                setCurrentFolder(sourcesRoot, []);
-
-                setSourcesStatus('Sources ready.');
-                sourcesEmpty?.classList.add('is-hidden');
-            } catch {
-                sourcesRoot = null;
-                setSourcesStatus('Missing or invalid ./manifestSources.txt');
-                if (sourcesEmpty) {
-                    sourcesEmpty.textContent = 'Add ./manifestSources.txt to enable the file explorer.';
-                    sourcesEmpty.classList.remove('is-hidden');
-                }
-            }
-        }
-        
-        function sortChildren(children) {
-            const folders = [];
-            const files = [];
-            for (const c of children || []) {
-                if (c.type === 'folder') folders.push(c);
-                else if (c.type === 'file') files.push(c);
-            }
-            const byName = (a, b) => String(a.name).localeCompare(String(b.name));
-            folders.sort(byName);
-            files.sort(byName);
-            return [...folders, ...files];
-        }
-
-        function setCurrentFolder(folder, stack) {
-            currentFolder = folder;
-            currentStack = stack;
-            renderBreadcrumb();
-            renderList();
-            highlightSidebarSelection();
-        }
-
-        function renderBreadcrumb() {
-            if (!sourcesBreadcrumb) return;
-
-            sourcesBreadcrumb.innerHTML = '';
-
-            const fullStack = [{ name: 'Sources', ref: sourcesRoot, stack: [] }, ...currentStack.map((n, idx) => ({
-                name: n.name,
-                ref: n,
-                stack: currentStack.slice(0, idx + 1),
-            }))];
-
-            fullStack.forEach((seg, idx) => {
-                const crumb = document.createElement('div');
-                crumb.className = 'crumb';
-                crumb.textContent = seg.name;
-                crumb.addEventListener('click', () => {
-                    if (!seg.ref) return;
-                    if (seg.stack.length === 0) {
-                        setCurrentFolder(sourcesRoot, []);
-                    } else {
-                        const parentStack = seg.stack.slice(0, -1);
-                        setCurrentFolder(seg.ref, parentStack);
-                    }
-                });
-
-                sourcesBreadcrumb.appendChild(crumb);
-
-                if (idx < fullStack.length - 1) {
-                    const sep = document.createElement('div');
-                    sep.className = 'crumb-sep';
-                    sep.textContent = '›';
-                    sourcesBreadcrumb.appendChild(sep);
-                }
-            });
-        }
-
-        function renderList() {
-            if (!sourcesList || !currentFolder) return;
-
-            sourcesList.innerHTML = '';
-            sourcesEmpty?.classList.add('is-hidden');
-
-            const children = sortChildren(currentFolder.children || []);
-            if (children.length === 0) {
-                sourcesEmpty?.classList.remove('is-hidden');
-                return;
-            }
-
-            for (const item of children) {
-                const row = document.createElement('div');
-                row.className = 'file-row';
-
-                const nameCol = document.createElement('div');
-                nameCol.className = 'name';
-
-                const icon = document.createElement('span');
-                icon.className = 'icon';
-                icon.textContent = item.type === 'folder' ? '📁' : '📄';
-
-                const label = document.createElement('span');
-                label.textContent = item.name;
-
-                nameCol.appendChild(icon);
-                nameCol.appendChild(label);
-
-                const typeCol = document.createElement('div');
-                typeCol.className = 'type';
-                typeCol.textContent = item.type === 'folder' ? 'Folder' : 'File';
-
-                row.appendChild(nameCol);
-                row.appendChild(typeCol);
-
-                row.addEventListener('click', () => {
-                    if (item.type === 'folder') {
-                        setCurrentFolder(item, [...currentStack, currentFolder].filter(Boolean));
-                        closePreview();
-                    } else {
-                        openFilePreview(item);
-                    }
-                });
-
-                sourcesList.appendChild(row);
-            }
-
-            setSourcesStatus(`Path: ${currentFolder.path || ''}`);
-        }
-
-        function highlightSidebarSelection() {
-            if (!sourcesSidebar || !currentFolder) return;
-
-            const activePath = currentFolder.path;
-            for (const el of sourcesSidebar.querySelectorAll('.tree-item')) {
-                el.classList.toggle('active', el.dataset.path === activePath);
-            }
-        }
-
-        function renderSidebar() {
-            if (!sourcesSidebar || !sourcesRoot) return;
-
-            sourcesSidebar.innerHTML = '';
-
-            function walk(folder, depth) {
-                const item = document.createElement('div');
-                item.className = 'tree-item';
-                item.dataset.path = folder.path || '';
-
-                item.style.paddingLeft = `${10 + depth * 12}px`;
-                item.textContent = folder.name;
-
-                item.addEventListener('click', () => {
-                    // Navigate to this folder by path
-                    const stack = findStackToFolder(sourcesRoot, folder);
-                    const parentStack = stack.slice(0, -1);
-                    setCurrentFolder(folder, parentStack);
-                    closePreview();
-                });
-
-                sourcesSidebar.appendChild(item);
-
-                const children = sortChildren(folder.children || []).filter((c) => c.type === 'folder');
-                for (const child of children) {
-                    walk(child, depth + 1);
-                }
-            }
-
-            walk(sourcesRoot, 0);
-        }
-
-        function findStackToFolder(root, target) {
-            const stack = [];
-            let found = false;
-
-            function dfs(node) {
-                if (found) return;
-                if (node === target) {
-                    found = true;
-                    stack.push(node);
-                    return;
-                }
-
-                if (node.type !== 'folder' || !Array.isArray(node.children)) return;
-
-                for (const child of node.children) {
-                    if (child.type !== 'folder') continue;
-                    dfs(child);
-                    if (found) {
-                        stack.push(node);
-                        return;
-                    }
-                }
-            }
-
-            dfs(root);
-            return stack.reverse();
-        }
-
-        function closePreview() {
-            if (!sourcesPreview) return;
-            sourcesPreview.classList.add('is-hidden');
-            if (sourcesPreviewCode) sourcesPreviewCode.textContent = '';
-            if (sourcesPreviewTitle) sourcesPreviewTitle.textContent = 'File';
-        }
-
-        async function openFilePreview(fileNode) {
-            if (!fileNode?.path) return;
-
-            try {
-                setSourcesStatus(`Opening: ${fileNode.path}`);
-                const res = await fetch(fileNode.path, { cache: 'no-store' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-                const text = await res.text();
-
-                if (!sourcesPreview || !sourcesPreviewCode || !sourcesPreviewTitle) return;
-
-                sourcesPreviewTitle.textContent = fileNode.name;
-
-                // Assign language class (best-effort)
-                sourcesPreviewCode.className = languageClassForFile(fileNode.name);
-                sourcesPreviewCode.textContent = text;
-
-                sourcesPreview.classList.remove('is-hidden');
-
-                if (window.hljs) {
-                    try {
-                        window.hljs.highlightElement(sourcesPreviewCode);
-                    } catch {
-                        // ignore
-                    }
-                }
-
-                setSourcesStatus(`Loaded: ${fileNode.path}`);
-            } catch (err) {
-                setSourcesStatus(`Failed to load: ${fileNode.path}`);
-                sourcesEmpty?.classList.remove('is-hidden');
-                if (sourcesEmpty) sourcesEmpty.textContent = `Could not load ${fileNode.path}.`;
-            }
-        }
-
-        sourcesClosePreviewBtn?.addEventListener('click', closePreview);
-
-        sourcesCopyBtn?.addEventListener('click', async () => {
-            const text = sourcesPreviewCode?.textContent || '';
-            if (!text) return;
-
-            try {
-                await navigator.clipboard.writeText(text);
-                setSourcesStatus('Copied file contents.');
-            } catch {
-                setSourcesStatus('Copy failed.');
-            }
-        });
-
-        sourcesRefreshBtn?.addEventListener('click', () => {
-            sourcesInitialized = false;
-            sourcesRoot = null;
-            currentFolder = null;
-            currentStack = [];
+        row.addEventListener('click', () => {
+          if (item.type === 'folder') {
+            setCurrentFolder(item, [...currentPath, item]);
             closePreview();
-            initSourcesExplorer(true);
+          } else {
+            openFilePreview(item);
+          }
         });
 
-        async function initSourcesExplorer(force = false) {
-            if (sourcesInitialized && !force) return;
-            sourcesInitialized = true;
+        sourcesList.appendChild(row);
+      }
 
-            setSourcesStatus('Loading sources…');
+      setSourcesStatus(`Path: ${currentFolder.path || ''}`);
+    }
 
-            try {
-                const manifest = await tryFetchJSONText('./manifestSources.json');
-                const normalized = normalizeSourcesManifest(manifest);
+    function highlightSidebarSelection() {
+      if (!sourcesSidebar || !currentFolder) return;
+      const activePath = currentFolder.path;
 
-                if (!normalized) {
-                    throw new Error('Invalid manifest format');
-                }
+      for (const el of sourcesSidebar.querySelectorAll('.tree-item')) {
+        el.classList.toggle('active', el.dataset.path === activePath);
+      }
+    }
 
-                sourcesRoot = normalized;
-                sourcesRoot.name = 'Sources';
-                sourcesRoot.type = 'folder';
+    function findPathToFolder(root, target) {
+      const path = [];
 
-                // Ensure paths exist for fetch()
-                decoratePaths(sourcesRoot, '.');
+      function dfs(node) {
+        if (!node || node.type !== 'folder') return false;
 
-                renderSidebar();
-                setCurrentFolder(sourcesRoot, []);
+        path.push(node);
+        if (node === target) return true;
 
-                setSourcesStatus('Sources ready.');
-                sourcesEmpty?.classList.add('is-hidden');
-            } catch {
-                sourcesRoot = null;
-                setSourcesStatus('Missing or invalid ./manifestSources.txt');
-                if (sourcesEmpty) {
-                    sourcesEmpty.textContent = 'Add ./manifestSources.txt to enable the file explorer.';
-                    sourcesEmpty.classList.remove('is-hidden');
-                }
-            }
+        const kids = Array.isArray(node.children) ? node.children : [];
+        for (const child of kids) {
+          if (child.type !== 'folder') continue;
+          if (dfs(child)) return true;
         }
-    </script>
+
+        path.pop();
+        return false;
+      }
+
+      dfs(root);
+      return path.length ? path : [root];
+    }
+
+    function renderSidebar() {
+      if (!sourcesSidebar || !sourcesRoot) return;
+      sourcesSidebar.innerHTML = '';
+
+      function walk(folder, depth) {
+        const item = document.createElement('div');
+        item.className = 'tree-item';
+        item.dataset.path = folder.path || '';
+        item.style.paddingLeft = `${10 + depth * 12}px`;
+        item.textContent = folder.name;
+
+        item.addEventListener('click', () => {
+          const path = findPathToFolder(sourcesRoot, folder);
+          setCurrentFolder(folder, path);
+          closePreview();
+        });
+
+        sourcesSidebar.appendChild(item);
+
+        const children = sortChildren(folder.children || []).filter((c) => c.type === 'folder');
+        for (const child of children) walk(child, depth + 1);
+      }
+
+      walk(sourcesRoot, 0);
+    }
+
+    function closePreview() {
+      if (!sourcesPreview) return;
+      sourcesPreview.classList.add('is-hidden');
+      if (sourcesPreviewCode) sourcesPreviewCode.textContent = '';
+      if (sourcesPreviewTitle) sourcesPreviewTitle.textContent = 'File';
+    }
+
+    async function openFilePreview(fileNode) {
+      const rawPath = fileNode?.path;
+      if (!rawPath) return;
+
+      const url = encodeURI(normalizeFetchPath(rawPath));
+
+      try {
+        setSourcesStatus(`Opening: ${rawPath}`);
+
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const text = await res.text();
+
+        if (!sourcesPreview || !sourcesPreviewCode || !sourcesPreviewTitle) return;
+
+        sourcesPreviewTitle.textContent = fileNode.name;
+        sourcesPreviewCode.className = languageClassForFile(fileNode.name);
+        sourcesPreviewCode.textContent = text;
+
+        sourcesPreview.classList.remove('is-hidden');
+
+        if (window.hljs) {
+          try { window.hljs.highlightElement(sourcesPreviewCode); } catch {}
+        }
+
+        setSourcesStatus(`Loaded: ${rawPath}`);
+      } catch {
+        setSourcesStatus(`Failed to load: ${rawPath}`);
+        sourcesEmpty?.classList.remove('is-hidden');
+        if (sourcesEmpty) sourcesEmpty.textContent = `Could not load ${rawPath}.`;
+      }
+    }
+
+    sourcesClosePreviewBtn?.addEventListener('click', closePreview);
+
+    sourcesCopyBtn?.addEventListener('click', async () => {
+      const text = sourcesPreviewCode?.textContent || '';
+      if (!text) return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        setSourcesStatus('Copied file contents.');
+      } catch {
+        setSourcesStatus('Copy failed.');
+      }
+    });
+
+    sourcesRefreshBtn?.addEventListener('click', () => {
+      sourcesInitialized = false;
+      sourcesRoot = null;
+      currentFolder = null;
+      currentPath = [];
+      closePreview();
+      initSourcesExplorer(true);
+    });
+
+    async function initSourcesExplorer(force = false) {
+      if (sourcesInitialized && !force) return;
+      sourcesInitialized = true;
+
+      setSourcesStatus('Loading sources…');
+
+      try {
+        const manifest = await tryFetchJSONText('./manifestSources.json');
+        const normalized = normalizeSourcesManifest(manifest);
+        if (!normalized) throw new Error('Invalid manifest format');
+
+        console.log(manifest)
+
+        sourcesRoot = normalized;
+        sourcesRoot.name = sourcesRoot.name || 'Sources';
+        sourcesRoot.type = 'folder';
+
+        // If you already put "path" in every node, this won't overwrite.
+        decoratePaths(sourcesRoot, '');
+
+        renderSidebar();
+        setCurrentFolder(sourcesRoot, [sourcesRoot]);
+
+        setSourcesStatus('Sources ready.');
+        sourcesEmpty?.classList.add('is-hidden');
+      } catch {
+        sourcesRoot = null;
+        setSourcesStatus('Missing or invalid ./manifestSources.json');
+        if (sourcesEmpty) {
+          sourcesEmpty.textContent = 'Add ./manifestSources.json to enable the file explorer.';
+          sourcesEmpty.classList.remove('is-hidden');
+        }
+      }
+    }
+  </script>
 </body>
 </html>
