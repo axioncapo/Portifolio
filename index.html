@@ -1580,7 +1580,7 @@
             let list = null;
 
             // Root manifests (GitHub Pages safe): ./manifestVideos.txt (JSON stored as text)
-            const rootManifest = await tryFetchJSONText('./manifestVideos.txt');
+            const rootManifest = await tryFetchJSONText('./manifestVideos.json');
             list = extractVideoFilesFromTree(rootManifest);
 
             // Legacy fallbacks (optional)
