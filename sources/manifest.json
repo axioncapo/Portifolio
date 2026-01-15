@@ -8,7 +8,7 @@
       "children": [
         {
           "type": "file",
-          "name": "content.luau"
+          "name": "content.txt"
         }
       ]
     },
@@ -20,11 +20,11 @@
           "type": "folder",
           "name": "packages",
           "children": [
-            { "type": "file", "name": "combatTool.lua" },
-            { "type": "file", "name": "region.lua" },
-            { "type": "file", "name": "serverExtender.lua" },
-            { "type": "file", "name": "typesCache.lua" },
-            { "type": "file", "name": "init.lua" }
+            { "type": "file", "name": "combatTool.txt" },
+            { "type": "file", "name": "region.txt" },
+            { "type": "file", "name": "serverExtender.txt" },
+            { "type": "file", "name": "typesCache.txt" },
+            { "type": "file", "name": "init.txt" }
           ]
         }
       ]
@@ -36,7 +36,7 @@
       "children": [
         {
           "type": "file",
-            "name": "controller.luau"
+            "name": "controller.txt"
         }
       ]
     },
@@ -45,10 +45,10 @@
       "type": "folder",
       "name": "Placement.controller",
       "children": [
-        { "type": "file", "name": "env.input.lua" },
-        { "type": "file", "name": "init.lua" },
-        { "type": "file", "name": "offsets.lua" },
-        { "type": "file", "name": "wall.controllers.lua" }
+        { "type": "file", "name": "env.input.txt" },
+        { "type": "file", "name": "init.txt" },
+        { "type": "file", "name": "offsets.txt" },
+        { "type": "file", "name": "wall.controllers.txt" }
       ]
     },
 
@@ -58,7 +58,7 @@
       "children": [
         {
           "type": "file",
-            "name": "controller.luau"
+            "name": "controller.txt"
         }
       ]
     }
