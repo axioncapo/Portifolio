@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-    tg
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>axiom port</title>
+    <title>axion</title>
     <link rel="icon" type="image/png" href="./favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1495,6 +1494,69 @@
             return await res.json();
         }
 
+
+        async function tryFetchJSONText(url) {
+            const text = await tryFetchText(url);
+            if (!text) return null;
+            try {
+                return JSON.parse(text);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function getExtFromName(name) {
+            const m = /\.([a-z0-9]+)$/i.exec(name || '');
+            return m ? m[1].toLowerCase() : '';
+        }
+
+        function joinPath(base, name) {
+            const a = String(base || '.').replace(/\/+$/, '');
+            if (!a || a === '.') return `./${name}`;
+            return `${a}/${name}`;
+        }
+
+        function extractVideoFilesFromTree(tree) {
+            if (!tree) return null;
+
+            // If the manifest is already an array of filenames/paths
+            if (Array.isArray(tree)) return tree;
+
+            // If the manifest is { files: [...] } or { videos: [...] }
+            const list = normalizeVideoList(tree);
+            if (list) return list;
+
+            const allowed = new Set(['mp4', 'webm', 'mov', 'm4v']);
+            const out = [];
+
+            function walk(node, base) {
+                if (!node) return;
+
+                if (node.type === 'folder') {
+                    const nextBase = node.name ? joinPath(base, node.name) : base;
+                    const kids = Array.isArray(node.children) ? node.children : [];
+                    for (const child of kids) walk(child, nextBase);
+                    return;
+                }
+
+                if (node.type === 'file') {
+                    const filename = String(node.name || '');
+                    const ext = getExtFromName(filename);
+
+                    // Ignore JSON files (user rule)
+                    if (ext === 'json') return;
+
+                    if (!allowed.has(ext)) return;
+
+                    out.push(joinPath(base, filename));
+                }
+            }
+
+            walk(tree, '.');
+
+            return out.length ? out : null;
+        }
+
         function normalizeVideoList(payload) {
             if (!payload) return null;
             if (Array.isArray(payload)) return payload;
@@ -1517,11 +1579,16 @@
 
             let list = null;
 
-            // Prefer JSON manifest
-            const jsonManifest = await tryFetchJSON('./videos/manifest.json');
-            list = normalizeVideoList(jsonManifest);
+            // Root manifests (GitHub Pages safe): ./manifestVideos.txt (JSON stored as text)
+            const rootManifest = await tryFetchJSONText('./manifestVideos.txt');
+            list = extractVideoFilesFromTree(rootManifest);
 
-            // Fallback to a simple newline manifest
+            // Legacy fallbacks (optional)
+            if (!list) {
+                const jsonManifest = await tryFetchJSON('./videos/manifest.json');
+                list = normalizeVideoList(jsonManifest);
+            }
+
             if (!list) {
                 const textManifest = await tryFetchText('./videos/manifest.txt');
                 if (textManifest) {
@@ -1530,7 +1597,9 @@
                         .map((x) => x.trim())
                         .filter(Boolean);
                 }
-            // Best-effort: parse directory listing (works on some local servers)
+            }
+
+            // Best-effort: parse directory listing (usually blocked on GitHub Pages)
             if (!list) {
                 const listing = await tryFetchText('./videos/');
                 if (listing) {
@@ -1546,10 +1615,9 @@
                 }
             }
 
-            }
 
             if (!list || list.length === 0) {
-                empty.textContent = 'No videos found. Add ./videos/manifest.json (or manifest.txt) listing the video files.';
+                empty.textContent = 'No videos found. Add ./manifestVideos.txt (JSON stored as text). Legacy fallbacks: ./videos/manifest.json or ./videos/manifest.txt.';
                 empty.classList.remove('is-hidden');
                 return;
             }
@@ -1646,7 +1714,7 @@
 
             // Array as root children
             if (Array.isArray(manifest)) {
-                return { name: 'Sources', type: 'folder', children: manifest };
+                return { name: 'sources', type: 'folder', children: manifest };
             }
 
             // Object map -> folders/files
@@ -1963,7 +2031,7 @@
             setSourcesStatus('Loading sources…');
 
             try {
-                const manifest = await tryFetchJSON('./Sources/manifest.json');
+                const manifest = await tryFetchJSONText('./manifestSources.json');
                 const normalized = normalizeSourcesManifest(manifest);
 
                 if (!normalized) {
@@ -1984,9 +2052,9 @@
                 sourcesEmpty?.classList.add('is-hidden');
             } catch {
                 sourcesRoot = null;
-                setSourcesStatus('Missing or invalid ./Sources/manifest.json');
+                setSourcesStatus('Missing or invalid ./manifestSources.txt');
                 if (sourcesEmpty) {
-                    sourcesEmpty.textContent = 'Add ./Sources/manifest.json to enable the file explorer.';
+                    sourcesEmpty.textContent = 'Add ./manifestSources.txt to enable the file explorer.';
                     sourcesEmpty.classList.remove('is-hidden');
                 }
             }
